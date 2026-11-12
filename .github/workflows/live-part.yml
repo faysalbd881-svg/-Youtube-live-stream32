@@ -1,0 +1,103 @@
+
+name: YouTube Live Stream Part
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      VIDEO_URL: ${{ vars.VIDEO_URL }}
+      YOUTUBE_STREAM_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
+      YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+
+    steps:
+      - name: Install FFmpeg and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg nodejs python3-venv
+
+      - name: Install yt-dlp
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade "yt-dlp[default]"
+
+      - name: Validate configuration
+        run: |
+          test -n "$VIDEO_URL" || {
+            echo "VIDEO_URL is missing"
+            exit 1
+          }
+
+          test -n "$YOUTUBE_STREAM_KEY" || {
+            echo "YouTube stream key is missing"
+            exit 1
+          }
+
+          test -n "$YOUTUBE_COOKIES_B64" || {
+            echo "YouTube cookies are missing"
+            exit 1
+          }
+
+      - name: Prepare YouTube cookies
+        run: |
+          printf '%s' "$YOUTUBE_COOKIES_B64" | base64 --decode > cookies.txt
+          chmod 600 cookies.txt
+          test -s cookies.txt
+
+      - name: Download YouTube Video
+        run: |
+          .venv/bin/yt-dlp \
+            --cookies cookies.txt \
+            --no-playlist \
+            --format "best[ext=mp4]/best" \
+            --output "video.%(ext)s" \
+            "$VIDEO_URL"
+
+          VIDEO_FILE=$(find . -maxdepth 1 -type f \
+            -name 'video.*' | head -n 1)
+
+          test -n "$VIDEO_FILE"
+          test -s "$VIDEO_FILE"
+
+          echo "VIDEO_FILE=$VIDEO_FILE" >> "$GITHUB_ENV"
+
+      - name: Start YouTube Live
+        run: |
+          echo "Starting YouTube live stream..."
+
+          ffmpeg \
+            -hide_banner \
+            -loglevel warning \
+            -nostdin \
+            -stream_loop -1 \
+            -re \
+            -i "$VIDEO_FILE" \
+            -t 17700 \
+            -map 0:v:0 \
+            -map 0:a:0? \
+            -c:v libx264 \
+            -preset veryfast \
+            -pix_fmt yuv420p \
+            -r 30 \
+            -g 60 \
+            -b:v 4500k \
+            -maxrate 4500k \
+            -bufsize 9000k \
+            -c:a aac \
+            -b:a 128k \
+            -ar 44100 \
+            -f flv \
+            "rtmp://a.rtmp.youtube.com/live2/${YOUTUBE_STREAM_KEY}"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f cookies.txt
+          rm -f video.*
