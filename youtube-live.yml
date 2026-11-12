@@ -1,0 +1,43 @@
+
+name: YouTube 24 Hour Live Stream
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: youtube-live-stream
+  cancel-in-progress: false
+
+jobs:
+
+  live-part-1:
+    name: Live Session 1
+    uses: ./.github/workflows/live-part.yml
+    secrets: inherit
+
+  live-part-2:
+    name: Live Session 2
+    needs: live-part-1
+    uses: ./.github/workflows/live-part.yml
+    secrets: inherit
+
+  live-part-3:
+    name: Live Session 3
+    needs: live-part-2
+    uses: ./.github/workflows/live-part.yml
+    secrets: inherit
+
+  live-part-4:
+    name: Live Session 4
+    needs: live-part-3
+    uses: ./.github/workflows/live-part.yml
+    secrets: inherit
+
+  live-part-5:
+    name: Live Session 5
+    needs: live-part-4
+    uses: ./.github/workflows/live-part.yml
+    secrets: inherit
